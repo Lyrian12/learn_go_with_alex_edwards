@@ -1,0 +1,15 @@
+{{define "title"}}Home{{end}}
+{{define "main"}}
+<h2>Latest Snippets</h2>
+{{range .Snippets}}
+<div class='snippet'>
+<div class='metadata'>
+<strong>{{.Title}}</strong>
+<small><a href='/snippet/{{.ID}}'>#{{.ID}}</a></small>
+</div>
+<pre>{{.Content}}</pre>
+</div>
+{{else}}
+<p>There's nothing to see here yet!</p>
+{{end}}
+{{end}}
