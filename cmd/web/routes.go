@@ -15,10 +15,11 @@ func (app *application) routes() http.Handler {
 
 	fileserver := http.FileServer(http.Dir("./ui/static"))
 	router.Handler(http.MethodGet, "/static/*filepath", http.StripPrefix("/static", fileserver))
-
 	router.HandlerFunc(http.MethodGet, "/", app.home)
 	router.HandlerFunc(http.MethodGet, "/snippet/:id", app.snippetView)
+
 	router.HandlerFunc(http.MethodGet, "/create", app.snippetCreate)
 	router.HandlerFunc(http.MethodPost, "/create", app.snippetCreatePost)
-	return app.recoverPanic(app.logRequest(secureHeaders(router)))
+	return app.sessionManager.LoadAndSave(app.recoverPanic(app.logRequest(secureHeaders(router))))
+
 }

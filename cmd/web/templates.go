@@ -3,5 +3,9 @@ package main
 import "gojourney/internal/models"
 
 type templateData struct {
-	Snippets []*models.Snippet
+	CurrentYear int
+	Snippets    []*models.Snippet
+	Snippet     *models.Snippet
+	Form        any
+	Flash       string
 }

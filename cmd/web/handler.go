@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"gojourney/internal/models"
+	"gojourney/internal/validator"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -12,7 +13,18 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+type snippetCreateForm struct {
+	Title   string
+	Content string
+	Expires string
+	validator.Validator
+}
+
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
+	app.renderCreateForm(w, &snippetCreateForm{Expires: "365"}, http.StatusOK)
+}
+
+func (app *application) renderCreateForm(w http.ResponseWriter, form *snippetCreateForm, status int) {
 	files := []string{
 		"./ui/html/base.tmpl",
 		"./ui/html/partials/nav.tmpl",
@@ -26,8 +38,9 @@ func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
 
-	err = ts.ExecuteTemplate(w, "base", &templateData{})
+	err = ts.ExecuteTemplate(w, "base", &templateData{Form: form})
 	if err != nil {
 		app.errorLog.Println(err.Error())
 		app.serverError(w, err)
@@ -96,9 +109,14 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	data := &templateData{
+		Snippet: snippet,
+		Flash:   app.sessionManager.PopString(r.Context(), "flash"),
+	}
+
 	w.Header().Set("Content-Type", "text/html")
 
-	err = ts.ExecuteTemplate(w, "base", snippet)
+	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
 		app.errorLog.Println(err.Error())
 		app.serverError(w, err)
@@ -111,25 +129,35 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	title := strings.TrimSpace(r.PostForm.Get("title"))
-	content := r.PostForm.Get("content")
-	expires, err := strconv.Atoi(r.PostForm.Get("expires"))
-	if err != nil || title == "" || strings.TrimSpace(content) == "" {
-		app.clientError(w, http.StatusBadRequest)
+	form := &snippetCreateForm{
+		Title:   r.PostForm.Get("title"),
+		Content: r.PostForm.Get("content"),
+		Expires: r.PostForm.Get("expires"),
+	}
+
+	expires, err := strconv.Atoi(form.Expires)
+	if err != nil {
+		form.Check(false, "expires", "Choose a valid expiration period.")
+	} else {
+		form.Check(validator.PermittedInt(expires, 1, 7, 365), "expires", "Choose a valid expiration period.")
+	}
+
+	form.Check(validator.NotBlank(form.Title), "title", "This field is required.")
+	form.Check(validator.MaxChars(strings.TrimSpace(form.Title), 50), "title", "Title must be 50 characters or fewer.")
+	form.Check(validator.NotBlank(form.Content), "content", "This field is required.")
+
+	if !form.Valid() {
+		app.renderCreateForm(w, form, http.StatusUnprocessableEntity)
 		return
 	}
 
-	switch expires {
-	case 1, 7, 365:
-	default:
-		app.clientError(w, http.StatusBadRequest)
-		return
-	}
-
-	id, err := app.snippets.Insert(title, content, expires)
+	title := strings.TrimSpace(form.Title)
+	id, err := app.snippets.Insert(title, form.Content, expires)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
+	app.sessionManager.Put(r.Context(), "flash", "Your snippet was saved successfully.")
+
 	http.Redirect(w, r, fmt.Sprintf("/snippet/%d", id), http.StatusSeeOther)
 }
